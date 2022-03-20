@@ -19,6 +19,12 @@ let name = "";
 
 //UTILS
 
+const pupconfig = {
+  headless: true,
+  defaultViewport: null,
+  args: ["--incognito", "--no-sandbox", "--single-process", "--no-zygote"],
+};
+
 if (existsSync("./info.json")) {
   let info = JSON.parse(fs.readFileSync("./info.json").toString());
   out = info.out;
@@ -67,9 +73,7 @@ async function searchMangaFlow() {
 
   name = prompt.name;
 
-  const brow = await puppeteer.launch({
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  const brow = await puppeteer.launch(pupconfig);
   const page = await brow.newPage();
 
   const spinPageLoad = createSpinner("Carregando pagina...").start();
@@ -125,6 +129,8 @@ async function imgsToPdf() {
 }
 
 async function MainFlow() {
+  const downloads = [];
+
   async function askLink() {
     const promptlink = await inquirer.prompt({
       name: "link",
@@ -179,9 +185,7 @@ async function MainFlow() {
   }
 
   await (async () => {
-    const brow = await puppeteer.launch({
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
+    const brow = await puppeteer.launch(pupconfig);
     const page = await brow.newPage();
 
     let resul;
@@ -189,7 +193,7 @@ async function MainFlow() {
     const spinPageLoad = createSpinner("Carregando pagina...").start();
 
     await page.goto(chaplink);
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(2000);
 
     spinPageLoad.success({ text: "Pagina carregada." });
 
@@ -214,8 +218,6 @@ async function MainFlow() {
 
     imgprocessing.start(images.length, 1);
 
-    const downloads = [];
-
     for (let i = 0; i < images.length; i++) {
       downloads.push(downloadImage(images[i], `./${out}/${name}-${i}.jpg`));
       imgprocessing.update(i + 1);
@@ -229,10 +231,10 @@ async function MainFlow() {
       spinDownload.success({ text: "Todas as imagens foram baixadas!" });
     });
 
-    await generatePdf(downloads.length);
-
     //page.screenshot({ path: out, fullPage: true, quality: 70, type: "jpeg" });
   })();
+
+  await generatePdf(downloads.length);
 
   process.exit(0);
 }
