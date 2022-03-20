@@ -43,23 +43,41 @@ saveSetting("quality", 70);
 mainMenu();
 
 async function mainMenu() {
-  let test = encodeURI(
-    `http://file.io/${process.env.FILEIO}?file=${fs.readFileSync("hello.jpg")}`
-  );
-
-  await axios
-    .post(test)
-    .then()
-    .catch((er) => console.log(er));
-
   const resp = await inquirer.prompt({
     name: "mainMenu",
     type: "list",
-    choices: ["Baixar manga", "Converter imagens em pdf"],
+    choices: ["Baixar manga", "Buscar manga", "Converter imagens em pdf"],
   });
 
   if (resp.mainMenu == "Baixar manga") MainFlow();
-  else imgsToPdf();
+  else if (resp.mainMenu == "Converter imagens em pdf") imgsToPdf();
+  else if (resp.mainMenu == "Buscar manga") searchMangaFlow();
+}
+
+//NOT DONE
+async function searchMangaFlow() {
+  const prompt = await inquirer.prompt({
+    name: "name",
+    type: "input",
+    message: "Name",
+    default() {
+      return name;
+    },
+  });
+
+  name = prompt.name;
+
+  const brow = await puppeteer.launch({
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+  const page = await brow.newPage();
+
+  const spinPageLoad = createSpinner("Carregando pagina...").start();
+
+  await page.goto(chaplink);
+  await page.waitForTimeout(300);
+
+  spinPageLoad.success({ text: "Pagina carregada." });
 }
 
 async function imgsToPdf() {
@@ -161,7 +179,9 @@ async function MainFlow() {
   }
 
   await (async () => {
-    const brow = await puppeteer.launch();
+    const brow = await puppeteer.launch({
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
     const page = await brow.newPage();
 
     let resul;
@@ -209,7 +229,7 @@ async function MainFlow() {
       spinDownload.success({ text: "Todas as imagens foram baixadas!" });
     });
 
-    await generatePdf(images.length);
+    await generatePdf(downloads.length);
 
     //page.screenshot({ path: out, fullPage: true, quality: 70, type: "jpeg" });
   })();
