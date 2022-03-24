@@ -10,20 +10,25 @@ import got from "got";
 import stream from "stream";
 import { saveSetting, readSetting, generatePdf } from "./utils.js";
 import axios from "axios";
+import { scrollPageToBottom } from "puppeteer-autoscroll-down";
 
 const pipeline = promisify(stream.pipeline);
 
 let chaplink = "";
 let out = "";
 let name = "";
+let delay = 400;
+let steps_to_scroll = 400;
 
 //UTILS
 
-const pupconfig = {
-  headless: true,
-  defaultViewport: null,
-  args: ["--incognito", "--no-sandbox", "--single-process", "--no-zygote"],
-};
+// const pupconfig = {
+//   headless: true,
+//   defaultViewport: null,
+//   args: ["--incognito", "--no-sandbox", "--single-process", "--no-zygote"],
+// };
+
+const pupconfig = {};
 
 if (existsSync("./info.json")) {
   let info = JSON.parse(fs.readFileSync("./info.json").toString());
@@ -36,6 +41,7 @@ if (existsSync("./info.json")) {
     name: "oi",
     chaplink: "null",
     range: "0-100",
+    delay: delay,
   };
   fs.writeFileSync("./info.json", JSON.stringify(obj), () => {});
   //`{"out":"manga","name":"hello","chaplink":"","range":"0-100"}`
@@ -125,7 +131,7 @@ async function imgsToPdf() {
   saveSetting("name", name);
   saveSetting("range", prp.range);
 
-  await generatePdf(l);
+  await generatePdf(l, { autodelete: true });
 }
 
 async function MainFlow() {
@@ -188,19 +194,21 @@ async function MainFlow() {
     const brow = await puppeteer.launch(pupconfig);
     const page = await brow.newPage();
 
+    page.setViewport({ width: 414, height: 896 });
+
     let resul;
 
     const spinPageLoad = createSpinner("Carregando pagina...").start();
 
-    await page.goto(chaplink);
-    await page.waitForTimeout(2000);
+    await page.goto(chaplink, { waitUntil: "load" });
+    await page.waitForTimeout(delay);
 
     spinPageLoad.success({ text: "Pagina carregada." });
 
     const spinFullPage = createSpinner("Carregando imagens...").start();
 
-    await page.select("#readingmode", "full");
-    await page.waitForTimeout(3500);
+    await page.select("#readingmode", "single");
+    await page.waitForTimeout(500);
 
     spinFullPage.success({ text: "Imagens carregadas." });
 
@@ -210,20 +218,45 @@ async function MainFlow() {
       cliProgress.Presets.shades_classic
     );
 
-    const images = await page.evaluate(() =>
-      Array.from(document.querySelectorAll(".ts-main-image"), (e) => e.src)
+    let images = await page.evaluate(() =>
+      Array.from(
+        document.querySelectorAll("#readerarea > .ts-main-image"),
+        (e) => e.src
+      )
     );
 
-    spinImages.success({ text: "Links obtidos." });
+    await page.waitForSelector("#select-paged", { timeout: 100 });
+    let innerHTML = await page.$eval("#select-paged", (e) => {
+      return e.innerHTML;
+    });
+    let tamanho = innerHTML.toString().split("value").length - 1;
+    console.log(`TAMANHO ->> ${tamanho}`);
 
-    imgprocessing.start(images.length, 1);
+    //imgprocessing.start(tamanho, 1);
+    images = [];
 
-    for (let i = 0; i < images.length; i++) {
+    for (let i = 0; i < tamanho; i++) {
+      let atual = await page.$eval("#readerarea > .ts-main-image", (e) => {
+        return e.src;
+      });
+      console.log(`ATUAL ${i} => ${atual}`);
+      images.push(atual);
+      // imgprocessing.update(i + 1);
       downloads.push(downloadImage(images[i], `./${out}/${name}-${i}.jpg`));
-      imgprocessing.update(i + 1);
+      await page.select("#select-paged", `${i + 2}`);
+      await page.waitForTimeout(100);
     }
 
-    imgprocessing.stop();
+    spinImages.success({ text: "Links obtidos." });
+    //imgprocessing.stop();
+
+    let width = 0;
+    let height = 0;
+
+    await page.evaluate(() => {
+      width = document.querySelector(".ts-main-image").width;
+      height = document.querySelector(".ts-main-image").height;
+    });
 
     const spinDownload = createSpinner("Baixando imagens...").start();
 
@@ -231,10 +264,10 @@ async function MainFlow() {
       spinDownload.success({ text: "Todas as imagens foram baixadas!" });
     });
 
+    await generatePdf(downloads.length, { width: width, height: height });
+
     //page.screenshot({ path: out, fullPage: true, quality: 70, type: "jpeg" });
   })();
-
-  await generatePdf(downloads.length);
 
   process.exit(0);
 }
