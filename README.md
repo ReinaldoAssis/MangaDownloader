@@ -1,3 +1,5 @@
+![Cover](https://i.imgur.com/LsQsw2P.png "Cover")
+
 # French Manga Downloader
 
 This project is meant for educational purposes only, I'm here not responsible for how third parties use it.
